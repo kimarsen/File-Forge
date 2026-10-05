@@ -1,5 +1,9 @@
+mod converter;
+mod rules;
+
 use notify::event::EventKind;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
+use rules::{Action, Rule};
 use std::path::Path;
 use std::sync::mpsc::channel;
 
@@ -19,6 +23,11 @@ fn main() -> notify::Result<()> {
     }
 
     watcher.watch(watch_path, RecursiveMode::NonRecursive)?;
+
+    let rules = vec![
+        Rule::new("ogg", "mp3"),
+        Rule::new("wav", "mp3"),
+    ];
     
     println!("Watching folder: {:?}", watch_path);
 
@@ -33,12 +42,24 @@ fn main() -> notify::Result<()> {
                             println!("New file detected: {}", file_name);
                             println!("File extension: {}", extension);
                             println!("Full path: {:?}", path);
+
+                            for rule in &rules {
+                                if rule.matches(path) {
+                                    match &rule.action {
+                                        Action::Convert { target_format } => {
+                                            if let Err(err) = converter::convert(path, target_format) {
+                                                eprintln!("Conversion error: {}", err);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
             Err(error) => {
-                println!("Error: {:?}", error)
+                println!("Error: {:?}", error);
             }
         }
     }
