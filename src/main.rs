@@ -7,6 +7,9 @@ use rules::{Action, Rule};
 use std::path::Path;
 use std::sync::mpsc::channel;
 
+// Write your folder path here. 
+const WATCH_FOLDER: &str = r"C:\Users\yourname\Downloads";
+
 fn main() -> notify::Result<()> {
     let (tx, rx) = channel();
 
@@ -17,9 +20,9 @@ fn main() -> notify::Result<()> {
         Config::default(),
     )?;
 
-    let watch_path = Path::new("./test_watch");
+    let watch_path = Path::new(WATCH_FOLDER);
     if !watch_path.exists() {
-        std::fs::create_dir(watch_path)?;
+        std::fs::create_dir_all(watch_path)?;
     }
 
     watcher.watch(watch_path, RecursiveMode::NonRecursive)?;
