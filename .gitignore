@@ -1,1 +1,6 @@
 /target
+%localappdata%/
+*.log
+.qodo/
+.kilo/
+test_watch/
