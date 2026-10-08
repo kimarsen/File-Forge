@@ -1,4 +1,5 @@
 mod converter;
+mod renamer;
 mod rules;
 
 use notify::event::EventKind;
@@ -8,7 +9,7 @@ use std::path::Path;
 use std::sync::mpsc::channel;
 
 // Write your folder path here. 
-const WATCH_FOLDER: &str = r"C:\Users\yourname\Downloads";
+const WATCH_FOLDER: &str = r"C:\Users\THE_BLACK_SWORDSMAN\Downloads";
 
 fn main() -> notify::Result<()> {
     let (tx, rx) = channel();
@@ -27,9 +28,11 @@ fn main() -> notify::Result<()> {
 
     watcher.watch(watch_path, RecursiveMode::NonRecursive)?;
 
+    // Write your rules here. Now it's just a examples for my own needs.
     let rules = vec![
         Rule::new("ogg", "mp3"),
         Rule::new("wav", "mp3"),
+        Rule::new_rename("txt", "DONE_").with_name_filter("report") 
     ];
     
     println!("Watching folder: {:?}", watch_path);
@@ -52,6 +55,11 @@ fn main() -> notify::Result<()> {
                                         Action::Convert { target_format } => {
                                             if let Err(err) = converter::convert(path, target_format) {
                                                 eprintln!("Conversion error: {}", err);
+                                            }
+                                        }
+                                        Action::Rename { prefix } => {
+                                            if let Err(err) = renamer::rename_with_prefix(path, prefix) {
+                                                eprintln!("Renaming error: {}", err);
                                             }
                                         }
                                     }
