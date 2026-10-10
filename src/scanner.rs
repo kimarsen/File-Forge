@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time{Duration, SystemTime};
+use std::time::{Duration, SystemTime};
 
 #[derive(Debug, Clone, Copy)]
 pub enum TimeFilter {
@@ -21,7 +21,7 @@ impl TimeFilter {
     }
 
     pub fn matches(&self, path: &Path) -> bool {
-        let max_age = self.max_age() {
+        let max_age = match self.max_age() {
             Some(age) => age,
             None => return true,
         };
