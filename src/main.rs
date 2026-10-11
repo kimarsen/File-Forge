@@ -1,17 +1,16 @@
+mod config;
 mod converter;
 mod renamer;
 mod rules;
 mod scanner;
 
+use config::AppConfig;
 use notify::event::EventKind;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use rules::{Action, Rule};
 use scanner::TimeFilter;
 use std::path::Path;
 use std::sync::mpsc::channel;
-
-// Write your folder path here. 
-const WATCH_FOLDER: &str = r"C:\Users\THE_BLACK_SWORDSMAN\Downloads";
 
 fn process_file(path: &Path, rules: &[Rule]) {
     for rule in rules {
@@ -34,17 +33,16 @@ fn process_file(path: &Path, rules: &[Rule]) {
 
 fn main() -> notify::Result<()> {
 
-    let watch_path = Path::new(WATCH_FOLDER);
+    let config_path = Path::new("config.json");
+    let config = AppConfig::load_or_create(config_path)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    let watch_path = Path::new(&config.watch_folder);
     if !watch_path.exists() {
         std::fs::create_dir_all(watch_path)?;
     }
 
-    // Write your rules here. Now it's just a examples for my own needs.
-    let rules = vec![
-        Rule::new("ogg", "mp3"),
-        Rule::new("wav", "mp3"),
-        Rule::new_rename("txt", "DONE_").with_name_filter("report") 
-    ];
+    let rules = config.rules;
 
     println!("Scanning existing files in folder: {:?}", watch_path);
     let existing_files = scanner::scan_directory(watch_path, TimeFilter::LastDay);

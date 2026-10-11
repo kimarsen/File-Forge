@@ -1,12 +1,13 @@
 use std::path::Path;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Action {
     Convert { target_format: String },
     Rename { prefix: String,},
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Rule {
     pub extension: Option<String>,
     pub name_contains: Option<String>,
