@@ -1,0 +1,32 @@
+{
+  "watch_folder": "C:\\Users\\THE_BLACK_SWORDSMAN\\Downloads",
+  "rules": [
+    {
+      "extension": "ogg",
+      "name_contains": null,
+      "action": {
+        "Convert": {
+          "target_format": "mp3"
+        }
+      }
+    },
+    {
+      "extension": "wav",
+      "name_contains": null,
+      "action": {
+        "Convert": {
+          "target_format": "mp3"
+        }
+      }
+    },
+    {
+      "extension": "txt",
+      "name_contains": "report",
+      "action": {
+        "Rename": {
+          "prefix": "DONE_"
+        }
+      }
+    }
+  ]
+}

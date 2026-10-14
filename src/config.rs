@@ -13,10 +13,10 @@ impl AppConfig {
     pub fn default_config() -> Self {
         Self {
             watch_folder: r"C:\Users\THE_BLACK_SWORDSMAN\Downloads".to_string(),
-            rules vec![
+            rules: vec![
                 Rule::new("ogg", "mp3"),
                 Rule::new("wav", "mp3"),
-                Rule::new_rename("txt", "DONE_").with_name_filter("report")
+                Rule::new_rename("txt", "DONE_").with_name_filter("report"),
             ],
         }
     }
