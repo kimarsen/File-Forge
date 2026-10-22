@@ -9,7 +9,7 @@ pub struct AppConfig {
     pub rules: Vec<Rule>,
 }
 
-impl AppConfig { //
+impl AppConfig { 
     pub fn default_config() -> Self {
         Self {
             watch_folder: r"C:\Users\THE_BLACK_SWORDSMAN\Downloads".to_string(),
