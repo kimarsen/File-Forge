@@ -189,16 +189,24 @@ fn pick_folder(app: AppHandle) -> Option<String> {
 
 #[tauri::command]
 fn add_preset(
-    state: State<'_, AppState>,
+    app: AppHandle,
     kind: String,
     watch: Option<String>,
     output: Option<String>,
 ) -> Result<AppConfig, String> {
     let kind = PresetKind::parse(&kind)
         .ok_or_else(|| "неизвестный пресет. Используйте audio, video или images".to_string())?;
-    let mut engine = lock_engine(&state);
-    engine.add_preset(kind, empty_to_none(watch), empty_to_none(output))?;
-    Ok(engine.config().clone())
+    {
+        let state = app.state::<AppState>();
+        let mut engine = lock_engine(&state);
+        engine.add_preset(kind, empty_to_none(watch), empty_to_none(output))?;
+    }
+    if watch_running(&app) {
+        let records = restart_watch(&app)?;
+        emit_records(&app, &records);
+    }
+    let state = app.state::<AppState>();
+    Ok(lock_engine(&state).config().clone())
 }
 
 #[tauri::command]
@@ -222,13 +230,14 @@ fn restart_watch(app: &AppHandle) -> Result<Vec<OperationRecord>, String> {
         )
     };
     let (tx, rx) = mpsc::channel();
+    let (ready_tx, ready_rx) = mpsc::channel();
     let stop = Arc::new(AtomicBool::new(false));
     let watcher_stop = Arc::clone(&stop);
     let thread_stop = Arc::clone(&stop);
     let app_for_thread = app.clone();
     let thread = thread::spawn(move || {
         let watcher = thread::spawn(move || {
-            if let Err(err) = run_watcher(dirs, tx, watcher_stop, None) {
+            if let Err(err) = run_watcher(dirs, tx, watcher_stop, Some(ready_tx)) {
                 tracing::error!("{err}");
             }
         });
@@ -249,9 +258,21 @@ fn restart_watch(app: &AppHandle) -> Result<Vec<OperationRecord>, String> {
         thread_stop.store(true, Ordering::Relaxed);
         let _ = watcher.join();
     });
-    {
-        let state = app.state::<AppState>();
-        *lock_watch(&state) = Some(WatchThread { stop, thread });
+    match ready_rx.recv_timeout(Duration::from_secs(3)) {
+        Ok(Ok(())) => {
+            let state = app.state::<AppState>();
+            *lock_watch(&state) = Some(WatchThread { stop, thread });
+        }
+        Ok(Err(err)) => {
+            stop.store(true, Ordering::Relaxed);
+            let _ = thread.join();
+            return Err(err);
+        }
+        Err(_) => {
+            stop.store(true, Ordering::Relaxed);
+            let _ = thread.join();
+            return Err("наблюдение не запустилось".to_string());
+        }
     }
     let state = app.state::<AppState>();
     let mut engine = lock_engine(&state);

@@ -10,7 +10,36 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 const STABLE_FOR: Duration = Duration::from_millis(300);
-const MAX_WAIT: Duration = Duration::from_secs(600);
+pub const STABLE_TIMEOUT: Duration = Duration::from_secs(600);
+
+pub fn wait_until_stable(path: &Path, max_wait: Duration) -> Result<(), String> {
+    if path.is_dir() {
+        return Err("это папка".to_string());
+    }
+    let started = Instant::now();
+    let mut last_size = file_size(path)?;
+    loop {
+        let remaining = max_wait.saturating_sub(started.elapsed());
+        if remaining.is_zero() {
+            return Err("файл ещё записывается".to_string());
+        }
+        thread::sleep(STABLE_FOR.min(remaining));
+        let size = file_size(path)?;
+        if size == last_size {
+            return Ok(());
+        }
+        last_size = size;
+    }
+}
+
+fn file_size(path: &Path) -> Result<u64, String> {
+    if !path.exists() {
+        return Err("файл исчез".to_string());
+    }
+    fs::metadata(path)
+        .map(|metadata| metadata.len())
+        .map_err(|err| format!("не удалось прочитать файл: {err}"))
+}
 
 struct Pending {
     last_size: Option<u64>,
@@ -77,13 +106,21 @@ pub fn run_watcher(
     ready: Option<Sender<Result<(), String>>>,
 ) -> Result<(), String> {
     let (event_tx, event_rx) = mpsc::channel();
-    let mut watcher = RecommendedWatcher::new(
+    let mut watcher = match RecommendedWatcher::new(
         move |result| {
             let _ = event_tx.send(result);
         },
         Config::default(),
-    )
-    .map_err(|err| format!("не удалось запустить наблюдение: {err}"))?;
+    ) {
+        Ok(watcher) => watcher,
+        Err(err) => {
+            let message = format!("не удалось запустить наблюдение: {err}");
+            if let Some(ready) = ready {
+                let _ = ready.send(Err(message.clone()));
+            }
+            return Err(message);
+        }
+    };
 
     let mut watched = 0usize;
     let mut errors = Vec::new();
@@ -170,7 +207,7 @@ fn poll_pending(
     recent.retain(|_, seen| now.duration_since(*seen) < Duration::from_secs(5));
     let mut ready = Vec::new();
     pending.retain(|path, state| {
-        if state.started.elapsed() > MAX_WAIT {
+        if state.started.elapsed() > STABLE_TIMEOUT {
             return false;
         }
         if !path.exists() {
@@ -264,6 +301,54 @@ mod tests {
         drop(session);
         assert!(saw_ready);
         assert!(!saw_partial);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn finished_file_becomes_stable() {
+        let root = std::env::temp_dir().join(format!(
+            "file-forge-stable-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("done.txt");
+        fs::write(&path, b"ok").unwrap();
+        assert!(wait_until_stable(&path, Duration::from_secs(2)).is_ok());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn growing_file_is_not_treated_as_ready() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!(
+            "file-forge-growing-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("growing.txt");
+        fs::write(&path, b"a").unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&stop);
+        let writing = path.clone();
+        let writer = thread::spawn(move || {
+            while !flag.load(Ordering::Relaxed) {
+                if let Ok(mut file) = fs::OpenOptions::new().append(true).open(&writing) {
+                    let _ = write!(file, "x");
+                }
+                thread::sleep(Duration::from_millis(15));
+            }
+        });
+        thread::sleep(Duration::from_millis(30));
+        let error = wait_until_stable(&path, Duration::from_millis(180)).unwrap_err();
+        stop.store(true, Ordering::Relaxed);
+        writer.join().unwrap();
+        assert!(error.contains("записывается"), "{error}");
         let _ = fs::remove_dir_all(root);
     }
 }

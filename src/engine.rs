@@ -5,6 +5,7 @@ use crate::paths::{self, relocate, unique_path};
 use crate::renamer::{self, NameContext, RenameSpec};
 use crate::rules::{self, Action, PresetKind, Rule, find_rule_index};
 use crate::scanner::{self, TimeFilter};
+use crate::watcher::{STABLE_TIMEOUT, wait_until_stable};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -130,6 +131,12 @@ impl Engine {
         if !path.is_file() || self.is_recent_output(path) {
             return Vec::new();
         }
+        if let Err(err) = wait_until_stable(path, STABLE_TIMEOUT) {
+            return vec![self.record(false, path, None, "wait", &err)];
+        }
+        if !path.is_file() || self.is_recent_output(path) {
+            return Vec::new();
+        }
         if self.config.ensure_ids() {
             let _ = self.save();
         }
@@ -200,6 +207,9 @@ impl Engine {
             .unwrap_or_else(|| output_path(input, &format, None));
         let quality = self.config.settings.quality.clone();
         let delete = delete.unwrap_or(self.config.settings.delete_original);
+        if let Err(err) = wait_until_stable(input, STABLE_TIMEOUT) {
+            return self.record(false, input, None, "convert", &err);
+        }
         match converter::convert(input, &destination, &format, &quality) {
             Ok(()) => {
                 let mut message = String::new();
@@ -579,6 +589,36 @@ mod tests {
         let records = engine.process_path(&source);
         assert!(records[0].success);
         assert!(dest.join("brief.pdf").exists());
+        assert!(!source.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn waits_for_a_growing_file_before_renaming() {
+        use std::io::Write;
+        let root = temp_dir("engine-grow");
+        let mut engine = engine_in(&root);
+        engine
+            .update(|config| {
+                config.watch_folder = root.to_string_lossy().to_string();
+                config.rules = vec![Rule::new_rename("txt", "DONE_").with_name_filter("report")];
+            })
+            .unwrap();
+        let source = root.join("report.txt");
+        fs::write(&source, b"aa").unwrap();
+        let writing = source.clone();
+        let writer = std::thread::spawn(move || {
+            for _ in 0..6 {
+                std::thread::sleep(std::time::Duration::from_millis(40));
+                let mut file = fs::OpenOptions::new().append(true).open(&writing).unwrap();
+                write!(file, "bb").unwrap();
+            }
+        });
+        let records = engine.process_path(&source);
+        writer.join().unwrap();
+        let renamed = root.join("DONE_report.txt");
+        assert!(records.iter().any(|record| record.success), "{records:?}");
+        assert_eq!(fs::read_to_string(&renamed).unwrap(), "aabbbbbbbbbbbb");
         assert!(!source.exists());
         let _ = fs::remove_dir_all(root);
     }

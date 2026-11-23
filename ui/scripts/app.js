@@ -371,13 +371,18 @@ async function removeRule(id) {
 }
 
 async function addPreset(kind) {
-  state.config = await api.addPreset(
-    kind,
-    emptyToNull($("preset-watch").value),
-    emptyToNull($("preset-output").value),
-  );
-  renderRules();
-  toast("Пресет добавлен");
+  try {
+    state.config = await api.addPreset(
+      kind,
+      emptyToNull($("preset-watch").value),
+      emptyToNull($("preset-output").value),
+    );
+    renderRules();
+    toast("Пресет добавлен");
+  } finally {
+    state.watching = await api.watchStatus();
+    renderStatus();
+  }
 }
 
 async function saveSettings() {

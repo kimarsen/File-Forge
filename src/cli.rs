@@ -200,10 +200,10 @@ fn watch(config: Option<PathBuf>, no_scan: bool, since: Option<String>) -> Resul
             .collect::<Vec<_>>()
             .join(", ")
     );
+    let session = spawn_watcher(dirs)?;
     if !no_scan {
         print_records(&engine.process_existing(filter));
     }
-    let session = spawn_watcher(dirs)?;
     loop {
         match session.recv_timeout(Duration::from_millis(400)) {
             Ok(path) => print_records(&engine.process_path(&path)),
