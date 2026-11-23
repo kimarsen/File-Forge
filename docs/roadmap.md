@@ -17,72 +17,72 @@ Hot-folder утилита: фоновый процесс следит за па�
 ## Этап 1: Ядро (чистый Rust, без GUI)
 
 ### 1.1 File Watcher (`watcher.rs`)
-- [ ] Добавить `notify` crate в Cargo.toml
-- [ ] Создать watcher, подписанный на события Create в указанной папке
-- [ ] Фильтровать события: реагировать только на новые файлы (не папки)
-- [ ] Обработка race condition: файл ещё скачивается → ждать стабилизации размера
-- [ ] Поддержка нескольких наблюдаемых папок
+- [x] Добавить `notify` crate в Cargo.toml
+- [x] Создать watcher, подписанный на события Create в указанной папке
+- [x] Фильтровать события: реагировать только на новые файлы (не папки)
+- [x] Обработка race condition: файл ещё скачивается → ждать стабилизации размера
+- [x] Поддержка нескольких наблюдаемых папок
 
 ### 1.2 Rules Engine (`rules.rs`)
-- [ ] Структура `Rule`: watch_dir, filter (extension, name_pattern), action, output_dir
-- [ ] Enum `Action`: Convert { target_format }, Rename { pattern }, Move { dest }
-- [ ] Функция `matches(rule, file_path) -> bool`
-- [ ] Функция `find_matching_rules(rules, file_path) -> Vec<&Rule>`
-- [ ] Пресеты: audio (ogg/wav/flac→mp3), video (mkv/webm→mp4), images (webp/png→jpg)
+- [x] Структура `Rule`: watch_dir, filter (extension, name_pattern), action, output_dir
+- [x] Enum `Action`: Convert { target_format }, Rename { pattern }, Move { dest }
+- [x] Функция `matches(rule, file_path) -> bool`
+- [x] Функция `find_matching_rules(rules, file_path) -> Vec<&Rule>`
+- [x] Пресеты: audio (ogg/wav/flac→mp3), video (mkv/webm→mp4), images (webp/png→jpg)
 
 ### 1.3 Converter (`converter.rs`)
-- [ ] Функция `convert(input: &Path, output: &Path, format: &str) -> Result<()>`
-- [ ] Внутри: сборка команды `ffmpeg -i input -flags output`
-- [ ] Маппинг форматов → FFmpeg-флаги (mp3: `-codec:a libmp3lame -qscale:a 2`)
-- [ ] Обработка ошибок FFmpeg (exit code, stderr)
-- [ ] Опция: удалить оригинал после успешной конвертации
+- [x] Функция `convert(input: &Path, output: &Path, format: &str) -> Result<()>`
+- [x] Внутри: сборка команды `ffmpeg -i input -flags output`
+- [x] Маппинг форматов → FFmpeg-флаги (mp3: `-codec:a libmp3lame -qscale:a 2`)
+- [x] Обработка ошибок FFmpeg (exit code, stderr)
+- [x] Опция: удалить оригинал после успешной конвертации
 
 ### 1.4 Renamer (`renamer.rs`)
-- [ ] Замена подстроки в имени файла
-- [ ] Добавление префикса / суффикса
-- [ ] Шаблон с переменными: `{name}`, `{date}`, `{counter}`
+- [x] Замена подстроки в имени файла
+- [x] Добавление префикса / суффикса
+- [x] Шаблон с переменными: `{name}`, `{date}`, `{counter}`
 
 ### 1.5 Config (`config.rs`)
-- [ ] Структура `Config`: Vec<Rule>, settings
-- [ ] Загрузка из JSON файла (serde_json)
-- [ ] Сохранение в JSON файл
-- [ ] Путь по умолчанию: `%APPDATA%/file-forge/config.json`
+- [x] Структура `Config`: Vec<Rule>, settings
+- [x] Загрузка из JSON файла (serde_json)
+- [x] Сохранение в JSON файл
+- [x] Путь по умолчанию: `%APPDATA%/file-forge/config.json`
 
 ### 1.6 Операционный лог
-- [ ] Структура `OperationLog`: timestamp, source, destination, action, success
-- [ ] Запись в файл (для undo / истории)
+- [x] Структура `OperationLog`: timestamp, source, destination, action, success
+- [x] Запись в файл (для undo / истории)
 
 ---
 
 ## Этап 2: CLI-обёртка (для отладки)
-- [ ] `main.rs`: парсинг CLI аргументов (clap)
-- [ ] Команда `watch` — запуск watcher с правилами из конфига
-- [ ] Команда `convert <input> <output>` — разовая конвертация
-- [ ] Команда `rules list / add / remove` — управление правилами
-- [ ] Вывод лога в stdout в реальном времени
+- [x] `main.rs`: парсинг CLI аргументов (clap)
+- [x] Команда `watch` — запуск watcher с правилами из конфига
+- [x] Команда `convert <input> <output>` — разовая конвертация
+- [x] Команда `rules list / add / remove` — управление правилами
+- [x] Вывод лога в stdout в реальном времени
 
 ---
 
 ## Этап 3: GUI (Tauri v2)
-- [ ] Инициализация Tauri v2 проекта (`cargo tauri init`)
-- [ ] Tauri commands: обёртки над Rust-функциями для вызова из JS
-- [ ] Экран «Правила» — CRUD для правил
-- [ ] Создание правила через форму: папка, фильтры, действие, выход
-- [ ] Пресеты — кнопки быстрого создания (Audio→MP3, Video→MP4)
-- [ ] Лог операций — live-список конвертаций (Tauri events → JS)
-- [ ] System Tray — сворачивание в трей, иконка, контекстное меню
-- [ ] Уведомления (toast) при конвертации
-- [ ] Автозапуск при старте Windows
+- [x] Инициализация Tauri v2 проекта (`cargo tauri init`)
+- [x] Tauri commands: обёртки над Rust-функциями для вызова из JS
+- [x] Экран «Правила» — CRUD для правил
+- [x] Создание правила через форму: папка, фильтры, действие, выход
+- [x] Пресеты — кнопки быстрого создания (Audio→MP3, Video→MP4)
+- [x] Лог операций — live-список конвертаций (Tauri events → JS)
+- [x] System Tray — сворачивание в трей, иконка, контекстное меню
+- [x] Уведомления (toast) при конвертации
+- [x] Автозапуск при старте Windows
 
 ---
 
 ## Этап 4: Полировка
-- [ ] Настройки качества (битрейт, кодек)
-- [ ] Batch-режим: обработать существующие файлы по правилам
-- [ ] Drag & Drop
-- [ ] Тёмная / светлая тема
-- [ ] Иконка приложения
-- [ ] Инсталлятор (NSIS через Tauri)
+- [x] Настройки качества (битрейт, кодек)
+- [x] Batch-режим: обработать существующие файлы по правилам
+- [x] Drag & Drop
+- [x] Тёмная / светлая тема
+- [x] Иконка приложения
+- [x] Инсталлятор (NSIS через Tauri)
 
 ---
 

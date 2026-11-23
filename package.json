@@ -1,0 +1,11 @@
+{
+  "name": "file-forge",
+  "private": true,
+  "scripts": {
+    "dev": "python3 -m http.server 1420 --bind 127.0.0.1 --directory ui",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

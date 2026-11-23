@@ -1,74 +1,326 @@
-use std::fs::{self, File};
-use std::path::Path;
-use std::process::Command;
-use std::thread::sleep;
-use std::time::Duration;
+use crate::config::QualitySettings;
+use crate::paths::ensure_parent;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
-fn clean_file_stem(stem: &str) -> String {
-    if let Some(pos) = stem.rfind('(') {
-        if stem.ends_with(')') {
-            let inside = &stem[pos + 1..stem.len() - 1];
-            if !inside.is_empty() && inside.chars().all(|c| c.is_ascii_digit()) {
-                return stem[..pos].trim_end().to_string();
-            }
-        }
-    }
-    stem.to_string()
+#[derive(Clone, Copy)]
+enum FormatKind {
+    Mp3,
+    Aac,
+    Vorbis,
+    Opus,
+    Flac,
+    Wav,
+    Video { faststart: bool },
+    Webm,
+    Jpeg,
+    Webp,
+    Png,
 }
 
-fn wait_until_ready(path: &Path) -> Result<(), String> {
-    for _ in 0..10 {
-        if let Ok(file) = File::open(path) {
-            if let Ok(metadata) = file.metadata() {
-                let initial_size = metadata.len();
-                if initial_size > 0 {
-                    sleep(Duration::from_millis(300));
-                    if let Ok(new_metadata) = file.metadata() {
-                        if new_metadata.len() == initial_size {
-                            return Ok(());
-                        }
-                    }
-                }
-            }
-        }
-        sleep(Duration::from_millis(300));
-    }
-    Err("File is empty or still being written".to_string())
+struct FormatProfile {
+    names: &'static [&'static str],
+    kind: FormatKind,
 }
 
-pub fn convert(input_path: &Path, target_format: &str) -> Result<(), String> {
-    wait_until_ready(input_path)?;
+fn profiles() -> &'static [FormatProfile] {
+    &[
+        FormatProfile {
+            names: &["mp3"],
+            kind: FormatKind::Mp3,
+        },
+        FormatProfile {
+            names: &["m4a", "aac"],
+            kind: FormatKind::Aac,
+        },
+        FormatProfile {
+            names: &["ogg", "oga"],
+            kind: FormatKind::Vorbis,
+        },
+        FormatProfile {
+            names: &["opus"],
+            kind: FormatKind::Opus,
+        },
+        FormatProfile {
+            names: &["flac"],
+            kind: FormatKind::Flac,
+        },
+        FormatProfile {
+            names: &["wav"],
+            kind: FormatKind::Wav,
+        },
+        FormatProfile {
+            names: &["mp4", "m4v", "mov"],
+            kind: FormatKind::Video { faststart: true },
+        },
+        FormatProfile {
+            names: &["mkv", "avi"],
+            kind: FormatKind::Video { faststart: false },
+        },
+        FormatProfile {
+            names: &["webm"],
+            kind: FormatKind::Webm,
+        },
+        FormatProfile {
+            names: &["jpg", "jpeg"],
+            kind: FormatKind::Jpeg,
+        },
+        FormatProfile {
+            names: &["webp"],
+            kind: FormatKind::Webp,
+        },
+        FormatProfile {
+            names: &["png"],
+            kind: FormatKind::Png,
+        },
+    ]
+}
 
-    let parent = input_path.parent().unwrap_or(Path::new(""));
-    let stem = input_path
+pub fn ffmpeg_args(format: &str, quality: &QualitySettings) -> Vec<String> {
+    let format = normalize_format(format);
+    let kind = profiles()
+        .iter()
+        .find(|profile| profile.names.iter().any(|name| *name == format))
+        .map(|profile| profile.kind);
+    match kind {
+        Some(FormatKind::Mp3) => vec![
+            "-codec:a".into(),
+            chosen(&quality.audio_codec, "libmp3lame"),
+            "-qscale:a".into(),
+            quality.mp3_qscale.to_string(),
+        ],
+        Some(FormatKind::Aac) => vec![
+            "-codec:a".into(),
+            chosen(&quality.audio_codec, "aac"),
+            "-b:a".into(),
+            quality.audio_bitrate.clone(),
+        ],
+        Some(FormatKind::Vorbis) => vec![
+            "-codec:a".into(),
+            chosen(&quality.audio_codec, "libvorbis"),
+            "-qscale:a".into(),
+            quality.mp3_qscale.to_string(),
+        ],
+        Some(FormatKind::Opus) => vec![
+            "-codec:a".into(),
+            chosen(&quality.audio_codec, "libopus"),
+            "-b:a".into(),
+            quality.audio_bitrate.clone(),
+        ],
+        Some(FormatKind::Flac) => vec!["-codec:a".into(), chosen(&quality.audio_codec, "flac")],
+        Some(FormatKind::Wav) => {
+            vec!["-codec:a".into(), chosen(&quality.audio_codec, "pcm_s16le")]
+        }
+        Some(FormatKind::Video { faststart }) => {
+            let mut args = vec![
+                "-codec:v".into(),
+                chosen(&quality.video_codec, "libx264"),
+                "-crf".into(),
+                quality.video_crf.to_string(),
+                "-codec:a".into(),
+                chosen(&quality.audio_codec, "aac"),
+                "-b:a".into(),
+                quality.audio_bitrate.clone(),
+            ];
+            if faststart {
+                args.push("-movflags".into());
+                args.push("+faststart".into());
+            }
+            args
+        }
+        Some(FormatKind::Webm) => vec![
+            "-codec:v".into(),
+            chosen(&quality.video_codec, "libvpx-vp9"),
+            "-crf".into(),
+            quality.video_crf.to_string(),
+            "-b:v".into(),
+            "0".into(),
+            "-codec:a".into(),
+            chosen(&quality.audio_codec, "libopus"),
+            "-b:a".into(),
+            quality.audio_bitrate.clone(),
+        ],
+        Some(FormatKind::Jpeg) => vec!["-q:v".into(), quality.image_quality.to_string()],
+        Some(FormatKind::Webp) => vec![
+            "-codec:v".into(),
+            "libwebp".into(),
+            "-quality".into(),
+            webp_quality(quality.image_quality).to_string(),
+        ],
+        Some(FormatKind::Png) => Vec::new(),
+        None => Vec::new(),
+    }
+}
+
+fn chosen(custom: &str, default_codec: &str) -> String {
+    let trimmed = custom.trim();
+    if trimmed.is_empty() {
+        default_codec.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn webp_quality(image_quality: u8) -> u8 {
+    let qscale = image_quality.clamp(1, 31);
+    100u8
+        .saturating_sub(qscale.saturating_mul(2))
+        .clamp(30, 100)
+}
+
+pub fn normalize_format(format: &str) -> String {
+    format.trim().trim_start_matches('.').to_ascii_lowercase()
+}
+
+pub fn clean_duplicate_stem(stem: &str) -> String {
+    let bytes = stem.as_bytes();
+    if bytes.len() < 4 || !stem.ends_with(')') {
+        return stem.to_string();
+    }
+    let Some(open) = stem.rfind('(') else {
+        return stem.to_string();
+    };
+    if open == 0 {
+        return stem.to_string();
+    }
+    let inside = &stem[open + 1..stem.len() - 1];
+    if inside.is_empty() || !inside.chars().all(|ch| ch.is_ascii_digit()) {
+        return stem.to_string();
+    }
+    stem[..open].trim_end().to_string()
+}
+
+pub fn output_path(input: &Path, format: &str, output_dir: Option<&Path>) -> PathBuf {
+    let parent = input.parent().unwrap_or(Path::new(""));
+    let dir = output_dir.unwrap_or(parent);
+    let stem = input
         .file_stem()
-        .and_then(|s| s.to_str())
+        .and_then(|value| value.to_str())
         .unwrap_or("output");
-    
-    let clean_name = clean_file_stem(stem);
-    let output_file_name = format!("{}.{}", clean_name, target_format);
-    let output_path = parent.join(output_file_name);
+    let stem = clean_duplicate_stem(stem);
+    dir.join(format!("{stem}.{}", normalize_format(format)))
+}
 
-    println!("Converting: {:?} -> {:?}", input_path, output_path);
-
-    let status = Command::new("ffmpeg")
+pub fn convert(
+    input: &Path,
+    output: &Path,
+    format: &str,
+    quality: &QualitySettings,
+) -> Result<(), String> {
+    if input == output {
+        return Err("выходной файл совпадает с исходным".to_string());
+    }
+    ensure_parent(output)?;
+    let mut command = Command::new("ffmpeg");
+    command
+        .arg("-hide_banner")
+        .arg("-loglevel")
+        .arg("error")
         .arg("-y")
         .arg("-i")
-        .arg(input_path)
-        .arg(&output_path)
-        .status()
-        .map_err(|e| format!("Failed to execute ffmpeg: {}", e))?;
+        .arg(input);
+    for arg in ffmpeg_args(format, quality) {
+        command.arg(arg);
+    }
+    command.arg(output);
+    command.stdin(Stdio::null());
+    let result = command.output().map_err(|err| {
+        format!("не удалось запустить ffmpeg: {err}. Установите FFmpeg и добавьте его в PATH")
+    })?;
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        let stderr = tail(stderr.trim(), 800);
+        return Err(match result.status.code() {
+            Some(code) => format!("ffmpeg завершился с кодом {code}: {stderr}"),
+            None => format!("ffmpeg завершился с ошибкой: {stderr}"),
+        });
+    }
+    if !output.exists() {
+        return Err("ffmpeg не создал выходной файл".to_string());
+    }
+    Ok(())
+}
 
-    if status.success() {
-        println!("Successfully converted to {:?}", output_path);
-
-        if let Err(e) = fs::remove_file(input_path) {
-            eprintln!("Failed to delete original file: {}", e);
-        } else {
-            println!("Deleted original file: {:?}", input_path);
-        }
-        Ok(())
+fn tail(text: &str, max_chars: usize) -> String {
+    let count = text.chars().count();
+    if count <= max_chars {
+        text.to_string()
     } else {
-        Err(format!("ffmpeg finished with error code: {:?}", status.code()))
+        text.chars().skip(count - max_chars).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn mp3_uses_lame_and_qscale() {
+        let args = ffmpeg_args("mp3", &QualitySettings::default());
+        assert_eq!(
+            args,
+            vec!["-codec:a", "libmp3lame", "-qscale:a", "2"]
+                .into_iter()
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn cleans_download_duplicate_suffix() {
+        assert_eq!(clean_duplicate_stem("song (1)"), "song");
+        assert_eq!(clean_duplicate_stem("song (live)"), "song (live)");
+        assert_eq!(
+            output_path(Path::new("/music/song (2).ogg"), "MP3", None),
+            PathBuf::from("/music/song.mp3")
+        );
+    }
+
+    #[test]
+    fn converts_wav_and_reports_ffmpeg_errors() {
+        let root = std::env::temp_dir().join(format!(
+            "file-forge-convert-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let wav = root.join("tone.wav");
+        let mp3 = root.join("tone.mp3");
+        let synth = Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=0.2",
+                "-c:a",
+                "pcm_s16le",
+            ])
+            .arg(&wav)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(
+            synth.status.success(),
+            "{}",
+            String::from_utf8_lossy(&synth.stderr)
+        );
+        convert(&wav, &mp3, "mp3", &QualitySettings::default()).unwrap();
+        assert!(mp3.metadata().unwrap().len() > 0);
+
+        let junk = root.join("notes.ogg");
+        fs::write(&junk, b"this is not audio").unwrap();
+        let error = convert(
+            &junk,
+            &root.join("notes.mp3"),
+            "mp3",
+            &QualitySettings::default(),
+        );
+        assert!(error.is_err());
+        assert!(error.unwrap_err().contains("ffmpeg"));
+        let _ = fs::remove_dir_all(root);
     }
 }

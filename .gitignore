@@ -1,6 +1,10 @@
 /target
-%localappdata%/
 *.log
+operations.jsonl
+%localappdata%/
 .qodo/
 .kilo/
 test_watch/
+node_modules/
+src-tauri/gen/
+src-tauri/target/

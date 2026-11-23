@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>File Forge</title>
+    <link rel="icon" href="icon.png" />
+    <link rel="stylesheet" href="styles/app.css" />
+  </head>
+  <body>
+    <div id="drop-overlay" hidden>
+      <div>
+        <strong>Отпустите файлы</strong>
+        <span>Обработаем их по текущим правилам</span>
+      </div>
+    </div>
+    <header>
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="1.5" y="1.5" width="29" height="29" rx="8" />
+          <path d="M8 21h16l-1.6 3.2H9.6z" />
+          <path d="M11.5 19.5v-6h2.4l2.1-3 2.1 3h2.4v6z" />
+        </svg>
+        <div>
+          <h1>File Forge</h1>
+          <p id="status-line">Наблюдение остановлено</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <label class="since">
+          <span>Уже в папке</span>
+          <select id="since">
+            <option value="day">за сутки</option>
+            <option value="week">за неделю</option>
+            <option value="month">за месяц</option>
+            <option value="all">все файлы</option>
+          </select>
+        </label>
+        <button id="batch-button" type="button">Разобрать</button>
+        <button id="watch-toggle" class="primary" type="button">Следить</button>
+      </div>
+    </header>
+    <p id="demo-banner" class="banner" hidden>
+      Демо-режим в браузере: правила сохраняются локально. Конвертация FFmpeg выполняется в приложении и в команде <code>file-forge</code>.
+    </p>
+    <div class="shell">
+      <nav>
+        <button type="button" data-view="rules" class="active">Правила</button>
+        <button type="button" data-view="log">Журнал</button>
+        <button type="button" data-view="settings">Настройки</button>
+      </nav>
+      <main>
+        <section id="view-rules">
+          <div class="toolbar">
+            <div>
+              <h2>Правила</h2>
+              <p>Новый файл проходит правила сверху вниз. После каждого шага проверяется уже новый путь.</p>
+            </div>
+            <button id="new-rule" class="primary" type="button">Новое правило</button>
+          </div>
+          <div class="presets">
+            <label>
+              Папка
+              <input id="preset-watch" type="text" placeholder="как у общей папки" />
+            </label>
+            <label>
+              Куда класть
+              <input id="preset-output" type="text" placeholder="рядом с исходным" />
+            </label>
+            <button type="button" data-preset="audio">Аудио → MP3</button>
+            <button type="button" data-preset="video">Видео → MP4</button>
+            <button type="button" data-preset="images">Картинки → JPG</button>
+          </div>
+          <form id="editor-form" class="editor" hidden>
+            <div class="editor-head">
+              <h3 id="editor-title">Новое правило</h3>
+              <label class="check">
+                <input id="rule-enabled" type="checkbox" checked />
+                Включено
+              </label>
+            </div>
+            <div class="grid">
+              <label>
+                Расширение
+                <input id="rule-ext" type="text" placeholder="ogg" />
+              </label>
+              <label>
+                Имя содержит
+                <input id="rule-name" type="text" placeholder="report" />
+              </label>
+              <label>
+                Шаблон имени
+                <input id="rule-glob" type="text" placeholder="take-*" />
+              </label>
+              <label>
+                Действие
+                <select id="action">
+                  <option value="convert">Конвертировать</option>
+                  <option value="rename">Переименовать</option>
+                  <option value="move">Переместить</option>
+                </select>
+              </label>
+              <label>
+                Смотреть папку
+                <span class="with-button">
+                  <input id="rule-watch" type="text" />
+                  <button type="button" data-browse="rule-watch">Обзор</button>
+                </span>
+              </label>
+              <label>
+                Папка результата
+                <span class="with-button">
+                  <input id="rule-output" type="text" />
+                  <button type="button" data-browse="rule-output">Обзор</button>
+                </span>
+              </label>
+            </div>
+            <div id="fields-convert" class="grid">
+              <label>
+                Формат
+                <input id="target-format" type="text" placeholder="mp3" />
+              </label>
+              <label>
+                Оригинал
+                <select id="delete-mode">
+                  <option value="inherit">как в настройках</option>
+                  <option value="yes">удалять</option>
+                  <option value="no">оставлять</option>
+                </select>
+              </label>
+            </div>
+            <div id="fields-rename" class="grid" hidden>
+              <label>
+                Префикс
+                <input id="prefix" type="text" placeholder="DONE_" />
+              </label>
+              <label>
+                Суффикс
+                <input id="suffix" type="text" placeholder="_final" />
+              </label>
+              <label>
+                Найти
+                <input id="find" type="text" />
+              </label>
+              <label>
+                Заменить на
+                <input id="replace" type="text" />
+              </label>
+              <label class="wide">
+                Шаблон
+                <input id="pattern" type="text" placeholder="{date}_{name}" />
+                <small>Переменные: {name} {date} {time} {counter} {ext}</small>
+              </label>
+            </div>
+            <div id="fields-move" hidden>
+              <label>
+                Куда переместить
+                <span class="with-button">
+                  <input id="move-dest" type="text" />
+                  <button type="button" data-browse="move-dest">Обзор</button>
+                </span>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button class="primary" type="submit">Сохранить</button>
+              <button id="editor-cancel" type="button">Отмена</button>
+            </div>
+          </form>
+          <div id="rule-list" class="cards"></div>
+        </section>
+        <section id="view-log" hidden>
+          <div class="toolbar">
+            <div>
+              <h2>Журнал</h2>
+              <p>Сюда попадают конвертации, переименования и ошибки.</p>
+            </div>
+          </div>
+          <div id="log-list" class="log"></div>
+        </section>
+        <section id="view-settings" hidden>
+          <div class="toolbar">
+            <div>
+              <h2>Настройки</h2>
+              <p id="config-path"></p>
+            </div>
+          </div>
+          <form id="settings-form" class="editor">
+            <div class="grid">
+              <label>
+                Тема
+                <select id="theme">
+                  <option value="dark">Тёмная</option>
+                  <option value="light">Светлая</option>
+                </select>
+              </label>
+              <label>
+                При запуске разбирать
+                <select id="scan-on-start">
+                  <option value="last_day">за сутки</option>
+                  <option value="last_week">за неделю</option>
+                  <option value="last_month">за месяц</option>
+                  <option value="all">все файлы</option>
+                </select>
+              </label>
+              <label>
+                Общая папка
+                <span class="with-button">
+                  <input id="watch-folder" type="text" />
+                  <button type="button" data-browse="watch-folder">Обзор</button>
+                </span>
+              </label>
+              <label>
+                Дополнительные папки
+                <textarea id="watch-folders" rows="4" placeholder="по одной папке на строку"></textarea>
+              </label>
+              <label>
+                MP3 qscale
+                <input id="mp3-qscale" type="number" min="0" max="9" />
+                <small>0 — крупнее файл, 9 — меньше. По умолчанию 2.</small>
+              </label>
+              <label>
+                Битрейт аудио
+                <input id="audio-bitrate" type="text" placeholder="192k" />
+              </label>
+              <label>
+                Аудиокодек
+                <input id="audio-codec" type="text" placeholder="авто" />
+              </label>
+              <label>
+                Видеокодек
+                <input id="video-codec" type="text" placeholder="libx264" />
+              </label>
+              <label>
+                CRF видео
+                <input id="video-crf" type="number" min="0" max="51" />
+              </label>
+              <label>
+                JPEG qscale
+                <input id="image-quality" type="number" min="1" max="31" />
+                <small>Меньше — чище картинка.</small>
+              </label>
+            </div>
+            <div class="checks">
+              <label class="check">
+                <input id="delete-original" type="checkbox" />
+                Удалять оригинал после успешной конвертации
+              </label>
+              <label class="check">
+                <input id="watch-on-start" type="checkbox" />
+                Начинать наблюдение при запуске
+              </label>
+              <label class="check">
+                <input id="autostart" type="checkbox" />
+                Автозапуск вместе с системой
+              </label>
+            </div>
+            <div class="form-actions">
+              <button class="primary" type="submit">Сохранить настройки</button>
+              <button id="quit" type="button">Выйти</button>
+            </div>
+          </form>
+        </section>
+      </main>
+    </div>
+    <div id="toasts" aria-live="polite"></div>
+    <script type="module" src="scripts/app.js"></script>
+  </body>
+</html>

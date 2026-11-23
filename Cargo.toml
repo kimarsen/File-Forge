@@ -1,9 +1,19 @@
+[workspace]
+members = [".", "src-tauri"]
+default-members = ["."]
+resolver = "2"
+
 [package]
 name = "file-forge"
 version = "0.1.0"
 edition = "2024"
+description = "Hot-folder converter and renamer"
 
 [dependencies]
+chrono = "0.4"
+clap = { version = "4", features = ["derive"] }
 notify = "8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "File Forge main window",
+  "windows": ["main"],
+  "permissions": ["core:default", "core:event:default"]
+}
